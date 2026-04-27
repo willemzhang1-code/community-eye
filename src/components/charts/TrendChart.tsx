@@ -58,7 +58,7 @@ export function TrendChart({ metrics, series }: Props) {
   return (
     <div className="w-full h-64 sm:h-72">
       <ResponsiveContainer>
-        <AreaChart data={data} margin={{ top: 10, right: 8, left: -16, bottom: 0 }}>
+        <AreaChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
           <defs>
             {series.map((s) => (
               <linearGradient

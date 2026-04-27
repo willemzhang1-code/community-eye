@@ -27,7 +27,7 @@ export function SentimentChart({ metrics, baseline }: Props) {
   return (
     <div className="w-full h-56">
       <ResponsiveContainer>
-        <LineChart data={data} margin={{ top: 10, right: 8, left: -16, bottom: 0 }}>
+        <LineChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} />
           <XAxis
             dataKey="date"
@@ -40,7 +40,7 @@ export function SentimentChart({ metrics, baseline }: Props) {
             tickLine={false}
             axisLine={false}
             tickFormatter={(v: number) => v.toFixed(1)}
-            width={36}
+            width={44}
           />
           <Tooltip contentStyle={{ fontSize: 12 }} />
           <ReferenceLine

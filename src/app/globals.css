@@ -83,17 +83,17 @@ body {
   min-height: 100dvh;
 }
 
-.glass {
+@utility glass {
   background: var(--surface-elevated);
-  backdrop-filter: saturate(180%) blur(24px);
   -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
   border: 1px solid var(--border);
 }
 
-.glass-strong {
+@utility glass-strong {
   background: color-mix(in oklab, var(--surface) 88%, transparent);
-  backdrop-filter: saturate(180%) blur(40px);
   -webkit-backdrop-filter: saturate(180%) blur(40px);
+  backdrop-filter: saturate(180%) blur(40px);
   border: 1px solid var(--border);
 }
 
