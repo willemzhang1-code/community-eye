@@ -1,5 +1,5 @@
 import { SettingsView } from "@/components/settings/SettingsView";
-import { MOCK_GAMES } from "@/lib/mock-data";
+import { GAMES } from "@/lib/games";
 
 export default function SettingsPage() {
   return (
@@ -12,7 +12,7 @@ export default function SettingsPage() {
           每款游戏拥有独立档案。系统按档案中的基线和规则判断异常，不套用统一公式。
         </p>
       </header>
-      <SettingsView games={MOCK_GAMES} />
+      <SettingsView games={GAMES} />
     </div>
   );
 }

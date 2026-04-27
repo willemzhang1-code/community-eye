@@ -1,18 +1,23 @@
 import { GameCard } from "@/components/dashboard/GameCard";
-import {
-  MOCK_GAMES,
-  getMetricsForGame,
-  getAnomalies,
-} from "@/lib/mock-data";
+import { GAMES, getRedditSubFor, detectAnomalies } from "@/lib/games";
+import { fetchSubreddit } from "@/lib/reddit";
 import { fmtDateLong } from "@/lib/format";
 
-export default function Home() {
+export const revalidate = 300;
+
+export default async function Home() {
   const today = new Date().toISOString().slice(0, 10);
-  const cards = MOCK_GAMES.map((game) => {
-    const metrics = getMetricsForGame(game.id);
-    const anomalies = getAnomalies(game, metrics);
-    return { game, metrics, anomalies };
-  });
+
+  const cards = await Promise.all(
+    GAMES.map(async (game) => {
+      const sub = getRedditSubFor(game);
+      const snap = sub
+        ? await fetchSubreddit(sub)
+        : null;
+      const anomalies = snap ? detectAnomalies(snap) : [];
+      return { game, snap, anomalies };
+    }),
+  );
 
   const totalAlerts = cards.reduce(
     (acc, c) => acc + c.anomalies.filter((a) => a.level !== "info").length,
@@ -28,17 +33,20 @@ export default function Home() {
         </h1>
         <p className="text-sm text-muted mt-1">
           {totalAlerts > 0
-            ? `${totalAlerts} 个异常信号待关注 · 监控 ${MOCK_GAMES.length} 款游戏`
-            : `一切平稳 · 监控 ${MOCK_GAMES.length} 款游戏`}
+            ? `${totalAlerts} 个异常信号待关注 · 监控 ${GAMES.length} 款游戏`
+            : `一切平稳 · 监控 ${GAMES.length} 款游戏`}
+        </p>
+        <p className="text-[11px] text-subtle mt-1">
+          数据来源：Reddit 公共 API · 5 分钟刷新
         </p>
       </header>
 
       <section className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
-        {cards.map(({ game, metrics, anomalies }) => (
+        {cards.map(({ game, snap, anomalies }) => (
           <GameCard
             key={game.id}
             game={game}
-            metrics={metrics}
+            snapshot={snap}
             anomalies={anomalies}
           />
         ))}

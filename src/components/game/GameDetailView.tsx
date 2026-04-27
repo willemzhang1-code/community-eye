@@ -1,13 +1,13 @@
-"use client";
-
-import { useMemo, useState } from "react";
 import { Card, CardSection } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
-import { TrendChart } from "@/components/charts/TrendChart";
-import { SentimentChart } from "@/components/charts/SentimentChart";
-import { RangeTabs, type RangeKey } from "./RangeTabs";
-import { fmtNum, fmtSent, pctDelta } from "@/lib/format";
-import type { Game, DailyMetric, Post, AnomalySignal } from "@/lib/types";
+import { fmtNum } from "@/lib/format";
+import type { Game, AnomalySignal } from "@/lib/types";
+import {
+  topPosts,
+  newestPosts,
+  type SubredditSnapshot,
+  type RedditPost,
+} from "@/lib/reddit";
 
 const lifecycleLabel: Record<string, string> = {
   "pre-announce": "预公布",
@@ -19,38 +19,14 @@ const lifecycleLabel: Record<string, string> = {
   sunset: "停运",
 };
 
-const platformLabel: Record<string, string> = {
-  reddit: "Reddit",
-  youtube: "YouTube",
-  x: "X / Twitter",
-  discord: "Discord",
-  bilibili: "Bilibili",
-  tieba: "贴吧",
-  steam: "Steam",
-};
-
 interface Props {
   game: Game;
-  metrics: DailyMetric[];
-  posts: Post[];
+  snapshot: SubredditSnapshot | null;
   anomalies: AnomalySignal[];
 }
 
-export function GameDetailView({ game, metrics, posts, anomalies }: Props) {
-  const [range, setRange] = useState<RangeKey>("30d");
-
-  const sliced = useMemo(() => {
-    const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
-    return metrics.slice(-days);
-  }, [metrics, range]);
-
-  const today = metrics[metrics.length - 1];
-  const yesterday = metrics[metrics.length - 2];
-
-  const baseline = game.profile.signals.baselines.sentiment_baseline;
-
-  const redditPosts = posts.filter((p) => p.platform === "reddit");
-  const ytPosts = posts.filter((p) => p.platform === "youtube");
+export function GameDetailView({ game, snapshot, anomalies }: Props) {
+  const sub = snapshot?.subreddit;
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -74,8 +50,35 @@ export function GameDetailView({ game, metrics, posts, anomalies }: Props) {
             {game.profile.basics.developer} · {game.profile.basics.genre} ·{" "}
             {game.profile.basics.regions.join(" / ")}
           </p>
+          {sub && (
+            <p className="text-xs text-subtle mt-1">
+              数据源：
+              <a
+                href={`https://www.reddit.com/r/${sub}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:underline"
+              >
+                r/{sub}
+              </a>
+              {snapshot?.fetchedAt && (
+                <>
+                  {" "}
+                  · 抓取于 {new Date(snapshot.fetchedAt).toLocaleString("zh-CN")}
+                </>
+              )}
+            </p>
+          )}
         </div>
       </header>
+
+      {snapshot?.error && (
+        <Card className="border-danger/30">
+          <CardSection className="text-sm text-danger">
+            Reddit 抓取失败：{snapshot.error}
+          </CardSection>
+        </Card>
+      )}
 
       {anomalies.length > 0 && (
         <Card className="border-warning/30">
@@ -101,218 +104,66 @@ export function GameDetailView({ game, metrics, posts, anomalies }: Props) {
         </Card>
       )}
 
-      <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KPI label="Reddit 帖" value={fmtNum(today.reddit_posts)} prev={yesterday?.reddit_posts} curr={today.reddit_posts} />
-        <KPI label="平均点赞" value={fmtNum(today.reddit_avg_upvotes)} prev={yesterday?.reddit_avg_upvotes} curr={today.reddit_avg_upvotes} />
-        <KPI label="YouTube" value={fmtNum(today.youtube_videos)} prev={yesterday?.youtube_videos} curr={today.youtube_videos} />
-        <KPI
-          label="情绪"
-          value={fmtSent(today.sentiment_score)}
-          prev={yesterday?.sentiment_score}
-          curr={today.sentiment_score}
-          isAbs
-        />
-      </section>
+      {snapshot && !snapshot.error && (
+        <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <KPI label="24h 帖子" value={fmtNum(snapshot.postsLast24h)} />
+          <KPI label="7d 帖子" value={fmtNum(snapshot.postsLast7d)} />
+          <KPI
+            label="平均 ups"
+            value={
+              snapshot.posts.length
+                ? fmtNum(Math.round(snapshot.avgUpvotes))
+                : "—"
+            }
+          />
+          <KPI
+            label="订阅"
+            value={
+              snapshot.subscribers != null
+                ? fmtNum(snapshot.subscribers)
+                : "—"
+            }
+          />
+        </section>
+      )}
 
       <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold tracking-tight">趋势</h2>
-          <RangeTabs value={range} onChange={setRange} />
-        </div>
-
+        <h2 className="text-lg font-semibold tracking-tight">趋势</h2>
         <Card>
-          <CardSection>
-            <div className="text-xs text-subtle mb-2">活跃度</div>
-            <TrendChart
-              metrics={sliced}
-              series={["reddit_posts", "youtube_videos", "x_mentions"]}
-            />
-          </CardSection>
-        </Card>
-
-        <Card>
-          <CardSection>
-            <div className="text-xs text-subtle mb-2">情绪曲线</div>
-            <SentimentChart metrics={sliced} baseline={baseline} />
+          <CardSection className="py-10 text-center">
+            <div className="text-sm text-muted">数据收集中</div>
+            <p className="text-xs text-subtle mt-2 max-w-md mx-auto">
+              系统刚启用 Reddit 实时抓取，需积累至少 7 天的快照后才会生成趋势图。当前先看下方的活跃帖子。
+            </p>
           </CardSection>
         </Card>
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <PostList
-          title={`Reddit · ${game.profile.community.find((c) => c.platform === "reddit")?.handle ?? "—"}`}
-          posts={redditPosts}
-        />
-        <PostList title="YouTube 视频" posts={ytPosts} />
-      </section>
+      {snapshot && snapshot.posts.length > 0 && (
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <PostList
+            title={`Reddit · ${sub ? `r/${sub}` : ""} · 最热`}
+            posts={topPosts(snapshot, 10)}
+          />
+          <PostList
+            title={`Reddit · ${sub ? `r/${sub}` : ""} · 最新`}
+            posts={newestPosts(snapshot, 10)}
+          />
+        </section>
+      )}
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold tracking-tight">游戏档案</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card>
-            <CardSection>
-              <h3 className="text-sm font-semibold mb-3">社区地图</h3>
-              <ul className="space-y-2.5">
-                {game.profile.community.map((c, i) => (
-                  <li
-                    key={i}
-                    className="flex items-start justify-between gap-3 text-sm"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-medium">
-                        {platformLabel[c.platform] ?? c.platform}
-                        {c.is_primary && (
-                          <Pill tone="accent" className="ml-2">
-                            主社区
-                          </Pill>
-                        )}
-                      </div>
-                      <div className="text-xs text-subtle truncate">
-                        {c.handle}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      {c.size != null && (
-                        <div className="tabular text-sm">
-                          {fmtNum(c.size)}
-                        </div>
-                      )}
-                      {c.baseline_daily_posts != null && (
-                        <div className="text-[11px] text-subtle">
-                          基线 {c.baseline_daily_posts}/日
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </CardSection>
-          </Card>
-
-          <Card>
-            <CardSection>
-              <h3 className="text-sm font-semibold mb-3">文化语境</h3>
-              <div className="text-xs uppercase tracking-wide text-subtle mt-1 mb-1.5">
-                俚语
-              </div>
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                {game.profile.culture.slang.map((s, i) => (
-                  <Pill key={i} tone="muted" title={s.meaning}>
-                    {s.term}
-                  </Pill>
-                ))}
-              </div>
-              <div className="text-xs uppercase tracking-wide text-subtle mb-1.5">
-                争议
-              </div>
-              <ul className="space-y-1.5 text-sm">
-                {game.profile.culture.controversies.map((c, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <Pill
-                      tone={c.status === "active" ? "warning" : "muted"}
-                      className="mt-0.5"
-                    >
-                      {c.status === "active" ? "进行中" : "已平息"}
-                    </Pill>
-                    <div>
-                      <div className="font-medium">{c.topic}</div>
-                      <div className="text-xs text-muted">{c.summary}</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <div className="text-xs uppercase tracking-wide text-subtle mt-4 mb-1.5">
-                重大事件
-              </div>
-              <ul className="space-y-1.5 text-sm">
-                {game.profile.culture.history.map((h, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <span className="text-xs tabular text-subtle w-20 shrink-0 pt-0.5">
-                      {h.date}
-                    </span>
-                    <span>{h.event}</span>
-                  </li>
-                ))}
-              </ul>
-            </CardSection>
-          </Card>
-
-          <Card>
-            <CardSection>
-              <h3 className="text-sm font-semibold mb-3">信号模型</h3>
-              <ul className="space-y-2 text-sm">
-                {game.profile.signals.rules.map((r, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <Pill
-                      tone={
-                        r.severity === "alert"
-                          ? "danger"
-                          : r.severity === "warn"
-                            ? "warning"
-                            : "accent"
-                      }
-                      className="mt-0.5"
-                    >
-                      {r.severity === "alert"
-                        ? "异常"
-                        : r.severity === "warn"
-                          ? "警告"
-                          : "信号"}
-                    </Pill>
-                    <span>{r.label}</span>
-                  </li>
-                ))}
-              </ul>
-            </CardSection>
-          </Card>
-
-          <Card>
-            <CardSection>
-              <h3 className="text-sm font-semibold mb-3">竞品关系</h3>
-              <ul className="space-y-2 text-sm">
-                {game.profile.competitors.map((c, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Pill tone={c.relation === "direct" ? "accent" : "muted"}>
-                        {c.relation === "direct" ? "直接" : "间接"}
-                      </Pill>
-                      <span className="truncate">{c.name}</span>
-                    </div>
-                    {c.overlap_pct != null && (
-                      <span className="text-xs text-subtle tabular shrink-0">
-                        重叠 {c.overlap_pct}%
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </CardSection>
-          </Card>
-        </div>
-      </section>
+      {snapshot && snapshot.posts.length === 0 && !snapshot.error && (
+        <Card>
+          <CardSection className="py-8 text-center text-sm text-subtle">
+            该 subreddit 当前抓样为空
+          </CardSection>
+        </Card>
+      )}
     </div>
   );
 }
 
-function KPI({
-  label,
-  value,
-  prev,
-  curr,
-  isAbs,
-}: {
-  label: string;
-  value: string;
-  prev?: number;
-  curr: number;
-  isAbs?: boolean;
-}) {
-  const delta =
-    prev != null ? (isAbs ? (curr - prev) * 100 : pctDelta(curr, prev)) : 0;
-  const positive = delta >= 0;
+function KPI({ label, value }: { label: string; value: string }) {
   return (
     <Card>
       <CardSection className="!p-4">
@@ -322,22 +173,12 @@ function KPI({
         <div className="mt-1 text-2xl font-semibold tabular tracking-tight">
           {value}
         </div>
-        {prev != null && Math.abs(delta) >= 0.5 && (
-          <div
-            className={`text-[11px] tabular mt-0.5 ${
-              positive ? "text-success" : "text-danger"
-            }`}
-          >
-            {positive ? "▲" : "▼"} {Math.abs(delta).toFixed(isAbs ? 0 : 1)}
-            {isAbs ? "" : "%"}
-          </div>
-        )}
       </CardSection>
     </Card>
   );
 }
 
-function PostList({ title, posts }: { title: string; posts: Post[] }) {
+function PostList({ title, posts }: { title: string; posts: RedditPost[] }) {
   return (
     <Card>
       <CardSection>
@@ -346,7 +187,7 @@ function PostList({ title, posts }: { title: string; posts: Post[] }) {
           {posts.length === 0 && (
             <li className="text-sm text-subtle py-2 px-1">暂无数据</li>
           )}
-          {posts.slice(0, 6).map((p) => (
+          {posts.map((p) => (
             <li key={p.id} className="py-2.5 px-1">
               <a
                 href={p.url}
@@ -357,25 +198,12 @@ function PostList({ title, posts }: { title: string; posts: Post[] }) {
                 <div className="text-sm font-medium leading-snug line-clamp-2">
                   {p.title}
                 </div>
-                <div className="mt-1 flex items-center gap-3 text-[11px] text-subtle tabular">
-                  <span>↑ {fmtNum(p.upvotes)}</span>
-                  <span>💬 {fmtNum(p.comments)}</span>
-                  {p.views != null && <span>▶ {fmtNum(p.views)}</span>}
-                  <Pill
-                    tone={
-                      p.sentiment === "positive"
-                        ? "success"
-                        : p.sentiment === "negative"
-                          ? "danger"
-                          : "muted"
-                    }
-                  >
-                    {p.sentiment === "positive"
-                      ? "正面"
-                      : p.sentiment === "negative"
-                        ? "负面"
-                        : "中性"}
-                  </Pill>
+                <div className="mt-1 flex items-center gap-3 text-[11px] text-subtle tabular flex-wrap">
+                  <span>↑ {fmtNum(p.ups)}</span>
+                  <span>💬 {fmtNum(p.num_comments)}</span>
+                  <span>{(p.upvote_ratio * 100).toFixed(0)}%</span>
+                  <span className="truncate">u/{p.author}</span>
+                  {p.flair && <Pill tone="muted">{p.flair}</Pill>}
                 </div>
               </a>
             </li>

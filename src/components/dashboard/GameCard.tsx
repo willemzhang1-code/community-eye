@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
-import { fmtNum, fmtSent, pctDelta } from "@/lib/format";
-import type { Game, DailyMetric, AnomalySignal } from "@/lib/types";
+import { fmtNum } from "@/lib/format";
+import type { Game, AnomalySignal } from "@/lib/types";
+import type { SubredditSnapshot } from "@/lib/reddit";
 
 interface Props {
   game: Game;
-  metrics: DailyMetric[];
+  snapshot: SubredditSnapshot | null;
   anomalies: AnomalySignal[];
 }
 
@@ -20,18 +21,7 @@ const lifecycleLabel: Record<string, string> = {
   sunset: "停运",
 };
 
-export function GameCard({ game, metrics, anomalies }: Props) {
-  const today = metrics[metrics.length - 1];
-  const yesterday = metrics[metrics.length - 2];
-  const wow7 = metrics[metrics.length - 8];
-
-  const postsDelta = yesterday
-    ? pctDelta(today.reddit_posts, yesterday.reddit_posts)
-    : 0;
-  const sentDelta = wow7
-    ? today.sentiment_score - wow7.sentiment_score
-    : 0;
-
+export function GameCard({ game, snapshot, anomalies }: Props) {
   const topSignal =
     anomalies.find((a) => a.level === "alert") ??
     anomalies.find((a) => a.level === "warn") ??
@@ -62,7 +52,9 @@ export function GameCard({ game, metrics, anomalies }: Props) {
                 </p>
               </div>
             </div>
-            {topSignal ? (
+            {snapshot?.error ? (
+              <Pill tone="danger">抓取失败</Pill>
+            ) : topSignal ? (
               <Pill
                 tone={
                   topSignal.level === "alert"
@@ -83,23 +75,35 @@ export function GameCard({ game, metrics, anomalies }: Props) {
             )}
           </div>
 
-          <div className="mt-5 grid grid-cols-3 gap-3">
-            <Stat
-              label="Reddit 帖"
-              value={fmtNum(today.reddit_posts)}
-              delta={postsDelta}
-            />
-            <Stat
-              label="情绪"
-              value={fmtSent(today.sentiment_score)}
-              delta={sentDelta * 100}
-              isAbs
-            />
-            <Stat
-              label="YouTube"
-              value={fmtNum(today.youtube_videos)}
-            />
-          </div>
+          {snapshot ? (
+            <div className="mt-5 grid grid-cols-3 gap-3">
+              <Stat
+                label="Reddit 24h"
+                value={fmtNum(snapshot.postsLast24h)}
+                hint="新帖"
+              />
+              <Stat
+                label="平均 ups"
+                value={
+                  snapshot.posts.length
+                    ? fmtNum(Math.round(snapshot.avgUpvotes))
+                    : "—"
+                }
+                hint={`抓样 ${snapshot.posts.length}`}
+              />
+              <Stat
+                label="订阅"
+                value={
+                  snapshot.subscribers != null
+                    ? fmtNum(snapshot.subscribers)
+                    : "—"
+                }
+                hint="r/sub"
+              />
+            </div>
+          ) : (
+            <div className="mt-5 text-xs text-subtle">未配置 Reddit 频道</div>
+          )}
 
           {anomalies.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-1.5">
@@ -128,16 +132,12 @@ export function GameCard({ game, metrics, anomalies }: Props) {
 function Stat({
   label,
   value,
-  delta,
-  isAbs,
+  hint,
 }: {
   label: string;
   value: string;
-  delta?: number;
-  isAbs?: boolean;
+  hint?: string;
 }) {
-  const showDelta = delta != null && Math.abs(delta) >= 0.5;
-  const positive = (delta ?? 0) >= 0;
   return (
     <div>
       <div className="text-[11px] text-subtle uppercase tracking-wide">
@@ -146,15 +146,8 @@ function Stat({
       <div className="mt-1 text-xl font-semibold tabular tracking-tight">
         {value}
       </div>
-      {showDelta && (
-        <div
-          className={`text-[11px] tabular mt-0.5 ${
-            positive ? "text-success" : "text-danger"
-          }`}
-        >
-          {positive ? "▲" : "▼"} {Math.abs(delta!).toFixed(isAbs ? 0 : 1)}
-          {isAbs ? "" : "%"}
-        </div>
+      {hint && (
+        <div className="text-[11px] text-subtle tabular mt-0.5">{hint}</div>
       )}
     </div>
   );
